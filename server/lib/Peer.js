@@ -191,19 +191,19 @@ class Peer extends EnhancedEventEmitter
 		{
 			this._closed = true;
 
-			setImmediate(() => this.safeEmit('close'));
+			setImmediate(() => this.safeEmit('close', 1006, 'transport already closed'));
 
 			return;
 		}
 
-		this._transport.on('close', () =>
+		this._transport.on('close', (code, reason) =>
 		{
 			if (this._closed)
 				return;
 
 			this._closed = true;
 
-			this.safeEmit('close');
+			this.safeEmit('close', code, reason);
 		});
 
 		this._transport.on('message', (message) =>
@@ -215,6 +215,8 @@ class Peer extends EnhancedEventEmitter
 			else if (message.notification)
 				this._handleNotification(message);
 		});
+
+		this._transport.on('pong', () => this.safeEmit('pong'));
 	}
 
 	_handleRequest(request)

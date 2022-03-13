@@ -110,6 +110,23 @@ class Peer extends EnhancedEventEmitter
 		this.safeEmit('close');
 	}
 
+	reconnect()
+	{
+		if (this._closed)
+			return;
+
+		logger.debug('reconnect()');
+
+		this._connected = false;
+
+		for (const sent of this._sents.values())
+		{
+			sent.close();
+		}
+
+		this._transport.reconnect();
+	}
+
 	/**
 	 * Send a protoo request to the server-side Room.
 	 *
@@ -256,6 +273,8 @@ class Peer extends EnhancedEventEmitter
 
 			this.safeEmit('close');
 		});
+
+		this._transport.on('ping', () => this.safeEmit('ping')); 
 
 		this._transport.on('message', (message) =>
 		{

@@ -15,18 +15,20 @@ class WebSocketServer extends EnhancedEventEmitter
 	 *
 	 * @emits {info: Object, accept: Function, reject: Function} connectionrequest
 	 */
-	constructor(httpServer, options)
+	constructor(httpServer, options, pingInterval, pingTimeout)
 	{
 		super(logger);
 
 		logger.debug('constructor() [option:%o]', options);
 
+		this._pingInterval = pingInterval;
+		this._pingTimeout = pingTimeout;
+
 		// Merge some settings into the given options.
 		options = Object.assign(
 			{
 				httpServer        : httpServer,
-				keepalive         : true,
-				keepaliveInterval : 60000
+				keepalive         : false,
 			},
 			options);
 
@@ -110,7 +112,7 @@ class WebSocketServer extends EnhancedEventEmitter
 					const connection = request.accept(WS_SUBPROTOCOL, request.origin);
 
 					// Create a new Protoo WebSocket transport.
-					const transport = new WebSocketTransport(connection);
+					const transport = new WebSocketTransport(connection, this._pingInterval, this._pingTimeout);
 
 					logger.debug('_onRequest() | accept() called');
 

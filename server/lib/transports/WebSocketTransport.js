@@ -6,11 +6,22 @@ const logger = new Logger('WebSocketTransport');
 
 class WebSocketTransport extends EnhancedEventEmitter
 {
-	constructor(connection)
+	constructor(connection, pingInterval, pingTimeout)
 	{
 		super(logger);
 
 		logger.debug('constructor()');
+
+		this._pingIntervalId = null;
+
+		this._pingTimeout = pingTimeout;
+		this._pingTimeoutId = null;
+
+		this._sendPing = this._sendPing.bind(this);
+		this._handlePingTimeout = this._handlePingTimeout.bind(this);
+
+		if (pingInterval)
+			this._pingIntervalId = setInterval(this._sendPing, pingInterval);
 
 		// Closed flag.
 		// @type {Boolean}
@@ -51,6 +62,10 @@ class WebSocketTransport extends EnhancedEventEmitter
 
 		// Don't wait for the WebSocket 'close' event, do it now.
 		this._closed = true;
+
+		clearInterval(this._pingIntervalId);
+		clearTimeout(this._pingTimeoutId);
+
 		this.safeEmit('close');
 
 		try
@@ -93,8 +108,11 @@ class WebSocketTransport extends EnhancedEventEmitter
 				'connection "close" event [conn:%s, code:%d, reason:"%s"]',
 				this, code, reason);
 
+			clearInterval(this._pingIntervalId);
+			clearTimeout(this._pingTimeoutId);
+
 			// Emit 'close' event.
-			this.safeEmit('close');
+			this.safeEmit('close', code, reason);
 		});
 
 		this._connection.on('error', (error) =>
@@ -112,6 +130,12 @@ class WebSocketTransport extends EnhancedEventEmitter
 				return;
 			}
 
+			if (raw.utf8Data === 'pong') {
+				this._handlePong();
+
+				return;
+			}
+	
 			const message = Message.parse(raw.utf8Data);
 
 			if (!message)
@@ -128,6 +152,32 @@ class WebSocketTransport extends EnhancedEventEmitter
 			// Emit 'message' event.
 			this.safeEmit('message', message);
 		});
+	}
+
+	_sendPing() {
+		if (this._closed) return;
+
+		this._connection.sendUTF('ping');
+
+		if (this._pingTimeout)
+			this._pingTimeoutId = setTimeout(this._handlePingTimeout, this._pingTimeout);
+	}
+
+	_handlePong() {
+		clearTimeout(this._pingTimeoutId);
+
+		this.safeEmit('pong');
+	}
+
+	_handlePingTimeout() {
+		try
+		{
+			this._connection.drop(1006, 'ping timeout', true);
+		}
+		catch (error)
+		{
+			logger.error('_handlePingTimeout() | error dropping the connection: %s', error);
+		}
 	}
 }
 

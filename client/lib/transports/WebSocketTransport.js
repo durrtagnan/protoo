@@ -69,12 +69,23 @@ class WebSocketTransport extends EnhancedEventEmitter
 			this._ws.onclose = null;
 			this._ws.onerror = null;
 			this._ws.onmessage = null;
-			this._ws.close();
+			this._ws.close(1000);
 		}
 		catch (error)
 		{
 			logger.error('close() | error closing the WebSocket: %o', error);
 		}
+	}
+
+	reconnect()
+	{
+		if (this._closed)
+			return;
+
+		this._ws.onclose = null;
+		this._ws.close(4001, 'reconnecting');
+
+		this._runWebSocket();
 	}
 
 	async send(message)
@@ -188,6 +199,13 @@ class WebSocketTransport extends EnhancedEventEmitter
 			{
 				if (this._closed)
 					return;
+
+				if (event.data === 'ping') {
+					this.safeEmit('ping');
+					this._ws.send('pong');
+
+					return;
+				}
 
 				const message = Message.parse(event.data);
 
