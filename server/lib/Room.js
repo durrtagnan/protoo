@@ -76,7 +76,7 @@ class Room extends EnhancedEventEmitter
 	 * @throws {TypeError} if wrong parameters.
 	 * @throws {Error} if Peer with same peerId already exists.
 	 */
-	createPeer(peerId, transport)
+	createPeer(peerId, transport, timeout)
 	{
 		logger.debug(
 			'createPeer() [peerId:%s, transport:%s]', peerId, transport);
@@ -100,7 +100,7 @@ class Room extends EnhancedEventEmitter
 		}
 
 		// Create the Peer instance.
-		const peer = new Peer(peerId, transport);
+		const peer = new Peer(peerId, transport, timeout);
 
 		// Store it in the map.
 		this._peers.set(peer.id, peer);

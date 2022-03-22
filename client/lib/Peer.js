@@ -260,7 +260,7 @@ class Peer extends EnhancedEventEmitter
 			this.safeEmit('failed', currentAttempt);
 		});
 
-		this._transport.on('close', () =>
+		this._transport.on('close', (code, reason) =>
 		{
 			if (this._closed)
 				return;
@@ -271,7 +271,7 @@ class Peer extends EnhancedEventEmitter
 
 			this._connected = false;
 
-			this.safeEmit('close');
+			this.safeEmit('close', code, reason);
 		});
 
 		this._transport.on('ping', () => this.safeEmit('ping')); 

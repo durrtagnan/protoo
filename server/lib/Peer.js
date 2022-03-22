@@ -14,7 +14,7 @@ class Peer extends EnhancedEventEmitter
 	 * @emits {request: protoo.Request, accept: Function, reject: Function} request
 	 * @emits {notification: protoo.Notification} notification
 	 */
-	constructor(peerId, transport)
+	constructor(peerId, transport, timeout = null)
 	{
 		super(logger);
 
@@ -24,6 +24,14 @@ class Peer extends EnhancedEventEmitter
 		// @type {Boolean}
 		this._closed = false;
 
+		// Reconnection flag
+		// @type {Boolean}
+		this._reconnecting = false;
+
+		this._timeout = timeout;
+		this._timeoutId = null;
+		this._handleTimeout = this._handleTimeout.bind(this);
+
 		// Peer id.
 		// @type {String}
 		this._id = peerId;
@@ -31,6 +39,8 @@ class Peer extends EnhancedEventEmitter
 		// Transport.
 		// @type {protoo.Transport}
 		this._transport = transport;
+
+		this._lastMsgTime = null;
 
 		// Custom data object.
 		// // @type {Object}
@@ -64,6 +74,11 @@ class Peer extends EnhancedEventEmitter
 		return this._closed;
 	}
 
+	get lastMsgTime()
+	{
+		return this._lastMsgTime;
+	}
+
 	/**
 	 * App custom data.
 	 *
@@ -85,7 +100,7 @@ class Peer extends EnhancedEventEmitter
 	/**
 	 * Close this Peer and its Transport.
 	 */
-	close()
+	close(code = 4000, reason = 'Normal close by server')
 	{
 		if (this._closed)
 			return;
@@ -94,8 +109,10 @@ class Peer extends EnhancedEventEmitter
 
 		this._closed = true;
 
+		clearTimeout(this._timeoutId);
+
 		// Close Transport.
-		this._transport.close();
+		this._transport.close(code, reason);
 
 		// Close every pending sent.
 		for (const sent of this._sents.values())
@@ -104,7 +121,22 @@ class Peer extends EnhancedEventEmitter
 		}
 
 		// Emit 'close' event.
-		this.safeEmit('close');
+		this.safeEmit('close', code, reason);
+	}
+
+	setNewTransport(transport)
+	{
+		this._transport.drop();
+
+		// Close every pending sent.
+		for (const sent of this._sents.values())
+		{
+			sent.close();
+		}
+
+		this._transport = transport;
+
+		this._handleTransport();
 	}
 
 	/**
@@ -118,6 +150,9 @@ class Peer extends EnhancedEventEmitter
 	 */
 	async request(method, data = undefined)
 	{
+		if (this._reconnecting)
+			return;
+
 		const request = Message.createRequest(method, data);
 
 		this._logger.debug('request() [method:%s, id:%s]', method, request.id);
@@ -177,6 +212,9 @@ class Peer extends EnhancedEventEmitter
 	 */
 	async notify(method, data = undefined)
 	{
+		if (this._reconnecting)
+			return;
+
 		const notification = Message.createNotification(method, data);
 
 		this._logger.debug('notify() [method:%s]', method);
@@ -201,6 +239,13 @@ class Peer extends EnhancedEventEmitter
 			if (this._closed)
 				return;
 
+			if (code === 4001 || reason === 'Connection dropped by remote peer.') // reconnecting
+			{
+				this._reconnecting = true;
+
+				return;
+			}
+
 			this._closed = true;
 
 			this.safeEmit('close', code, reason);
@@ -208,6 +253,10 @@ class Peer extends EnhancedEventEmitter
 
 		this._transport.on('message', (message) =>
 		{
+			this._lastMsgTime = Date.now();
+
+			if (this._timeout) this._resetTimeout();
+
 			if (message.request)
 				this._handleRequest(message);
 			else if (message.response)
@@ -216,7 +265,14 @@ class Peer extends EnhancedEventEmitter
 				this._handleNotification(message);
 		});
 
-		this._transport.on('pong', () => this.safeEmit('pong'));
+		this._transport.on('pong', () =>
+		{
+			this._lastMsgTime = Date.now();
+
+			if (this._timeout) this._resetTimeout();
+
+			this.safeEmit('pong');
+		});
 	}
 
 	_handleRequest(request)
@@ -291,6 +347,24 @@ class Peer extends EnhancedEventEmitter
 	_handleNotification(notification)
 	{
 		this.safeEmit('notification', notification);
+	}
+
+	_resetTimeout() {
+		clearTimeout(this._timeoutId);
+
+		this._timeoutId = setTimeout(this._handleTimeout, this._timeout);
+	}
+
+	_handleTimeout() {
+		try
+		{
+			this._transport.drop();
+			this.close(1006, 'Timed out');
+		}
+		catch (error)
+		{
+			logger.error('_handlePingTimeout() | error dropping the connection: %s', error);
+		}
 	}
 }
 

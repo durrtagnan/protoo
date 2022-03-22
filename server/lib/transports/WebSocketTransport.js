@@ -6,7 +6,7 @@ const logger = new Logger('WebSocketTransport');
 
 class WebSocketTransport extends EnhancedEventEmitter
 {
-	constructor(connection, pingInterval, pingTimeout)
+	constructor(connection, pingInterval)
 	{
 		super(logger);
 
@@ -18,7 +18,6 @@ class WebSocketTransport extends EnhancedEventEmitter
 		this._pingTimeoutId = null;
 
 		this._sendPing = this._sendPing.bind(this);
-		this._handlePingTimeout = this._handlePingTimeout.bind(this);
 
 		if (pingInterval)
 			this._pingIntervalId = setInterval(this._sendPing, pingInterval);
@@ -53,7 +52,7 @@ class WebSocketTransport extends EnhancedEventEmitter
 		);
 	}
 
-	close()
+	close(code = 4000, reason = 'Normal close by server')
 	{
 		if (this._closed)
 			return;
@@ -64,13 +63,12 @@ class WebSocketTransport extends EnhancedEventEmitter
 		this._closed = true;
 
 		clearInterval(this._pingIntervalId);
-		clearTimeout(this._pingTimeoutId);
 
 		this.safeEmit('close');
 
 		try
 		{
-			this._connection.close(4000, 'closed by protoo-server');
+			this._connection.close(code, reason);
 		}
 		catch (error)
 		{
@@ -78,9 +76,21 @@ class WebSocketTransport extends EnhancedEventEmitter
 		}
 	}
 
-	async send(message)
+	drop()
 	{
 		if (this._closed)
+			return;
+
+		this._closed = true;
+
+		clearInterval(this._pingIntervalId);
+
+		this._connection.drop(4001, 'reconnecting', true);
+	}
+
+	async send(message)
+	{
+		if (this._closed || !this._connection.connected)
 			throw new Error('transport closed');
 
 		try
@@ -109,7 +119,6 @@ class WebSocketTransport extends EnhancedEventEmitter
 				this, code, reason);
 
 			clearInterval(this._pingIntervalId);
-			clearTimeout(this._pingTimeoutId);
 
 			// Emit 'close' event.
 			this.safeEmit('close', code, reason);
@@ -131,7 +140,7 @@ class WebSocketTransport extends EnhancedEventEmitter
 			}
 
 			if (raw.utf8Data === 'pong') {
-				this._handlePong();
+				this.safeEmit('pong');
 
 				return;
 			}
@@ -155,29 +164,9 @@ class WebSocketTransport extends EnhancedEventEmitter
 	}
 
 	_sendPing() {
-		if (this._closed) return;
+		if (this._closed || !this._connection.connected) return;
 
 		this._connection.sendUTF('ping');
-
-		if (this._pingTimeout)
-			this._pingTimeoutId = setTimeout(this._handlePingTimeout, this._pingTimeout);
-	}
-
-	_handlePong() {
-		clearTimeout(this._pingTimeoutId);
-
-		this.safeEmit('pong');
-	}
-
-	_handlePingTimeout() {
-		try
-		{
-			this._connection.drop(1006, 'ping timeout', true);
-		}
-		catch (error)
-		{
-			logger.error('_handlePingTimeout() | error dropping the connection: %s', error);
-		}
 	}
 }
 

@@ -151,8 +151,9 @@ class WebSocketTransport extends EnhancedEventEmitter
 					'WebSocket "close" event [wasClean:%s, code:%s, reason:"%s"]',
 					event.wasClean, event.code, event.reason);
 
-				// Don't retry if code is 4000 (closed by the server).
-				if (event.code !== 4000)
+				// Don't retry if code is 4000 (closed by the server)
+				// or 4002 (connection from a different tab)
+				if (event.code !== 4000 && event.code !== 4002)
 				{
 					// If it was not connected, try again.
 					if (!wasConnected)
@@ -184,7 +185,7 @@ class WebSocketTransport extends EnhancedEventEmitter
 				this._closed = true;
 
 				// Emit 'close' event.
-				this.safeEmit('close');
+				this.safeEmit('close', event.code, event.reason);
 			};
 
 			this._ws.onerror = () =>

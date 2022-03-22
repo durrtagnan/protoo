@@ -1,6 +1,6 @@
 {
   "name": "@durrtagnan/protoo-server",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Fork of protoo Node.js server module",
   "author": "Iñaki Baz Castillo <ibc@aliax.net>",
   "homepage": "https://github.com/durrtagnan/protoo",
