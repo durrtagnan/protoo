@@ -14,9 +14,6 @@ class WebSocketTransport extends EnhancedEventEmitter
 
 		this._pingIntervalId = null;
 
-		this._pingTimeout = pingTimeout;
-		this._pingTimeoutId = null;
-
 		this._sendPing = this._sendPing.bind(this);
 
 		if (pingInterval)
