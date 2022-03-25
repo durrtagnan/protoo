@@ -137,6 +137,8 @@ class Peer extends EnhancedEventEmitter
 		this._transport = transport;
 
 		this._handleTransport();
+
+    this._reconnecting = false;
 	}
 
 	/**
